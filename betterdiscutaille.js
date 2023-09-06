@@ -1,16 +1,3 @@
-const mdp = makeMDP();
-mdp.addInlineSyntax ({	// this is sample for img
-    tag: "IG",
-    priority: 60,
-    provisionalText: '<img url="$2" alt="$1"></img>',
-    matchRegex: new RegExp("!\\[(.+?)\\]\\((.+?)\\)", 'g'),
-    converter: function ( argBlock ) {
-        return null;
-    },
-    convertedHTML: new Array()
-});
-mdp.removeBlockSyntax("PP");
-
 function log(message) {
     console.log("[BETTER DISCUTAILLE] " + message);
 }
@@ -28,7 +15,7 @@ const TAGS = [
     }
 ]
 
-let config = {};
+const VERIFIED_ICON = `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #3f7b5d"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></svg>`;
 
 function saveKnownUser(pseudo, status) {
     let user = config.known_users.find(u => u.pseudo === pseudo);
@@ -45,33 +32,33 @@ function saveKnownUser(pseudo, status) {
     saveConfig();
 }
 
-function saveConfig() {
-    window.localStorage.setItem("config", JSON.stringify(config));
-}
-
-function loadConfig() {
-    if (window.localStorage.getItem("config") === null) {
-        config = {
-            "pseudo": "",
-            "status": "",
-            "known_users": []
-        };
-        saveConfig();
+function parseMessageData(msg) {
+    if (msg.length < 2) return {msg: msg, data: null};;
+    const isFromExtension = msg.charCodeAt(0) === CHAR_TABLE[0].charCodeAt(0) && msg.charCodeAt(1) === CHAR_TABLE[0].charCodeAt(0) && msg.charCodeAt(2) === CHAR_TABLE[0].charCodeAt(0);
+    if (!isFromExtension) return {msg: msg, data: null};
+    const message_data_hex = unhideHex(msg.split("").filter(c => CHAR_TABLE.includes(c)).join("").slice(3));
+    const message_data = JSON.parse(hex2ascii(message_data_hex.toString(16), "hex"));
+    return {
+        msg: msg.split("").filter(c => !CHAR_TABLE.includes(c)).join(""),
+        data: message_data
     }
-    config = JSON.parse(window.localStorage.getItem("config"));
 }
-loadConfig();
 
-function parseMd(md) {
-    return mdp.render(md).trim();
+async function verifyMessageSignature(message, pseudo) {
+    const {msg, data} = parseMessageData(message);
+    if (!data) return false;
+    console.log(data);
+    const signature = BigInt(data.signature);
+    if (data.timestamp < new Date().getTime() - 1000 * 2) return false;
+    return await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, signature, BigInt(data.public_key));
 }
 
 function parseLinks(msg) {
     return msg.replaceAll(/(?<!href=")(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
-function parseMessage(msg) {
-    msg = parseMd(msg);
+async function parseMessage(msg, pseudo) {
+    const verified = await verifyMessageSignature(msg, pseudo);
     msg = parseLinks(msg);
     const mentions = [];
     for (let i in msg) {
@@ -111,10 +98,10 @@ function parseMessage(msg) {
         msg = `<span class="normal-message">${msg}</span>`;
     }
 
-    return msg;
+    return {msg: msg, verified: verified};
 }
 
-function parsePseudo(text, isAdmin) {
+function parsePseudo(text, isAdmin, isVerified) {
     let pseudo;
     let status = "";
     let parsedPseudo;
@@ -125,7 +112,7 @@ function parsePseudo(text, isAdmin) {
     }
     else {
         pseudo = text;
-        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo}</span></span></span>`;
+        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${isVerified ? `<span class="verified">${VERIFIED_ICON}</span>` : ""}</span></span></span>`;
     }
     saveKnownUser(pseudo, status);
     for (let tag of TAGS) {
@@ -153,14 +140,15 @@ function parseSmallPseudo(text) {
     return {fullPseudo: parsedPseudo, withoutTags: pseudoWithoutTags};
 }
 
-printMessage = function(data) {
-    data.pseudo = parsePseudo(data.pseudo, data.isAdmin);
-    data.message = parseMessage(data.message);
+printMessage = async function(data) {
+    const parsedMessage = await parseMessage(data.message, data.pseudo);
+    data.message = parsedMessage.msg;
+    data.pseudo = parsePseudo(data.pseudo, data.isAdmin, parsedMessage.verified);
     if (data.pseudo === lastPseudo) {
         addToLastMessage(data.message);
     }
     else {
-        document.getElementById("messagecontainer").innerHTML = '<div class="messages"><p>' + data.pseudo + '<br>' + data.message + '</p></div>' + document.getElementById("messagecontainer").innerHTML;
+        document.getElementById("messagecontainer").innerHTML = '<div class="messages">' + data.pseudo + '<br><span class="normal-message">' + data.message + '</span></div>' + document.getElementById("messagecontainer").innerHTML;
         lastPseudo = data.pseudo;
     }
 }
@@ -172,6 +160,19 @@ sendPseudo = function() {
     saveConfig();
     document.getElementById("pseudo").value = document.getElementById("pseudoInput").value + (document.getElementById("statusInput").value !== "" ? " | " + document.getElementById("statusInput").value : "");
     origSendPseudo();
+}
+
+origSendMessage = sendMessage;
+sendMessage = async function() {
+    const s = CHAR_TABLE[0];
+    const ts = new Date().getTime();
+    document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideHex(ascii2hex(JSON.stringify({
+        dataType: "signedMessage",
+        signature: "0x" + (await getMessageSignature(`${document.getElementById("textinput").value}-${config.pseudo}-${ts}`)).toString(16),
+        timestamp: ts,
+        public_key: config.personal_key.n
+    })));
+    await origSendMessage();
 }
 
 const pseudoContainer = document.querySelector(".topbar > .flexrows:first-of-type");
@@ -283,13 +284,15 @@ document.getElementById("textinput").addEventListener("keyup", function(e) {
 });
 
 async function bdInit() {
+
+
     while (socket.readyState !== 1) {
         await new Promise(r => setTimeout(r, 100));
     }
     sendPseudo();
-    printMessage({
+    await printMessage({
         pseudo: "Better Discutaille SYSTÈME | Made with love by DocSystem",
-        message: "Better Discutaille s'est chargé correctement !\nTu peux maintenant commencer à discutailler !",
+        message: "Better Discutaille s'est chargé correctement !\nQue le chaos soit !",
         isAdmin: true
     });
 }
