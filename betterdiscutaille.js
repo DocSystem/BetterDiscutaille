@@ -297,4 +297,4 @@ async function bdInit() {
     });
 }
 
-bdInit();
+bdInit().then();
