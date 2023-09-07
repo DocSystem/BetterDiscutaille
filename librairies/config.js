@@ -16,7 +16,10 @@ function loadConfig() {
             "status": "",
             "known_users": [],
             "trusted_users": [],
-            "personal_key": null
+            "personal_key": null,
+            "settings": {
+                "sign_messages": true
+            }
         };
         saveConfig();
     }
