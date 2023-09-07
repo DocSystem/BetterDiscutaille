@@ -83,9 +83,7 @@ async function parseMessage(message, pseudo) {
         console.log(data);
         if (data.dataType === "signedMessage") {
             verified = await verifyMessageSignature(msg, data, pseudo);
-            if (verified === TRUST_STATE.KEY_UNTRUSTED) {
-                key_hash = await hash(data.publicKey.n);
-            }
+            key_hash = await hash(data.publicKey.n);
         }
     }
     msg = parseLinks(msg);
@@ -144,7 +142,6 @@ async function verifiedIconClickHandler(elem) {
             document.querySelectorAll(`.verified-icon[data-key-hash="${keyHash}"][data-pseudo="${pseudo}"]`).forEach(e => {
                 e.innerHTML = VERIFIED_ICON[TRUST_STATE.KEY_TRUSTED];
                 e.setAttribute("data-verification-state", TRUST_STATE.KEY_TRUSTED);
-                e.setAttribute("data-key-hash", "null");
             });
         }
     }
