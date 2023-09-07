@@ -67,3 +67,11 @@ function unhideHex(hiddenString) {
     }
     return BigInt("0x" + hex);
 }
+
+function hideJSON(jsonObj) {
+    return hideHex(ascii2hex(JSON.stringify(jsonObj)));
+}
+
+function unhideJSON(hidden) {
+
+}
