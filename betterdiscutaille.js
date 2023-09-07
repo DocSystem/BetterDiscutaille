@@ -12,6 +12,7 @@ const TAGS = [
 ]
 
 const TRUST_STATE = {
+    REPLAY_ATTACK: 104,
     TIMEOUT: 103,
     KEY_INVALID: 102,
     NO_KEY: 101,
@@ -20,12 +21,15 @@ const TRUST_STATE = {
 }
 
 const VERIFIED_ICON = {
+    104: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #ff0000"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>`,
     103: `<svg viewBox="0 0 384 512" style="width: 14px; height: 14px; fill: #cb500e"><path d="M32 0C14.3 0 0 14.3 0 32S14.3 64 32 64V75c0 42.4 16.9 83.1 46.9 113.1L146.7 256 78.9 323.9C48.9 353.9 32 394.6 32 437v11c-17.7 0-32 14.3-32 32s14.3 32 32 32H64 320h32c17.7 0 32-14.3 32-32s-14.3-32-32-32V437c0-42.4-16.9-83.1-46.9-113.1L237.3 256l67.9-67.9c30-30 46.9-70.7 46.9-113.1V64c17.7 0 32-14.3 32-32s-14.3-32-32-32H320 64 32zM96 75V64H288V75c0 25.5-10.1 49.9-28.1 67.9L192 210.7l-67.9-67.9C106.1 124.9 96 100.4 96 75z"/></svg>`,
     102: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #ff0000"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>`,
     101: ``,
     100: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #ffcc00"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24V264c0 13.3-10.7 24-24 24s-24-10.7-24-24V152c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg>`,
     0: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #3f7b5d"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></svg>`
 };
+
+let alreadySentSignatures = [];
 
 function saveKnownUser(pseudo, status) {
     let user = config.known_users.find(u => u.pseudo === pseudo);
@@ -54,15 +58,30 @@ function parseMessageData(msg) {
 }
 
 async function verifyMessageSignature(msg, data, pseudo) {
-    if (data.timestamp < new Date().getTime() - 1000 * 2) return TRUST_STATE.TIMEOUT;
     const key_hash = await hash(data.publicKey.n);
+
     // verify that the signature is valid
     if (await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
+        // verify that the message isn't too old
+        if (data.timestamp < new Date().getTime() - 1000 * 2) return TRUST_STATE.TIMEOUT;
+
+        // verify that the message wasn't already sent
+        if (alreadySentSignatures.includes(data.signature)) {
+            return TRUST_STATE.REPLAY_ATTACK;
+        }
+        else {
+            alreadySentSignatures.push(data.signature);
+            setTimeout(() => {
+                alreadySentSignatures = alreadySentSignatures.filter(s => s !== data.signature);
+            }, 1000 * 2);
+        }
+
         // verify that the key is trusted and that the pseudo is correct
         const trusted_user = config.trusted_users.find(u => u.key_hash === key_hash && u.pseudo === pseudo);
         return (trusted_user !== undefined) ? TRUST_STATE.KEY_TRUSTED : TRUST_STATE.KEY_UNTRUSTED;
     }
     else {
+        // message was altered
         return TRUST_STATE.KEY_INVALID;
     }
 }
@@ -129,7 +148,7 @@ async function verifiedIconClickHandler(elem) {
                 key_hash: keyHash,
                 pseudo: pseudo
             });
-            document.querySelectorAll(`.verified-icon[data-key-hash="${keyHash}"][data-pseudo="${pseudo}"]`).forEach(e => {
+            document.querySelectorAll(`.verified-icon[data-key-hash="${keyHash}"][data-pseudo="${pseudo}"][data-verification-state="${TRUST_STATE.KEY_UNTRUSTED}"]`).forEach(e => {
                 e.innerHTML = VERIFIED_ICON[TRUST_STATE.KEY_TRUSTED];
                 e.setAttribute("data-verification-state", TRUST_STATE.KEY_TRUSTED);
             });
@@ -137,13 +156,36 @@ async function verifiedIconClickHandler(elem) {
     }
 }
 
-function parsePseudo(pseudo, status, isAdmin, verificationState, keyHash) {
+function verifiedIconHoverHandler(elem) {
+    const keyHash = elem.getAttribute("data-key-hash");
+    const smallKeyHash = keyHash.substring(0, 8);
+    const pseudo = elem.getAttribute("data-pseudo");
+    const verificationState = parseInt(elem.getAttribute("data-verification-state"));
+    const timestamp = parseInt(elem.getAttribute("data-timestamp"));
+    if (verificationState === TRUST_STATE.KEY_TRUSTED) {
+        showTooltip(`Le message est signé par <b>${pseudo}</b><br>${smallKeyHash}`, elem.getBoundingClientRect().x, elem.getBoundingClientRect().y, "#579a76");
+    } else if (verificationState === TRUST_STATE.KEY_UNTRUSTED) {
+        showTooltip(`Le message est signé par <b>${pseudo}</b><br>${smallKeyHash}<br>Si vous lui faites confiance, enregistrez sa clé en cliquant sur l'icone jaune`, elem.getBoundingClientRect().x, elem.getBoundingClientRect().y, "#ffcc00");
+    } else if (verificationState === TRUST_STATE.KEY_INVALID) {
+        showTooltip(`La signature de ce message <b>ne correspond pas</b> à son contenu.<br>Le message ou le pseudo peuvent avoir été altérés`, elem.getBoundingClientRect().x, elem.getBoundingClientRect().y, "#ff0000");
+    } else if (verificationState === TRUST_STATE.TIMEOUT) {
+        showTooltip(`La signature du message a expiré.<br>Ce message à été signé par <b>${pseudo}</b> le ${new Date(timestamp).toLocaleDateString()} à ${new Date(timestamp).toLocaleTimeString()}`, elem.getBoundingClientRect().x, elem.getBoundingClientRect().y, "#ff0000");
+    } else if (verificationState === TRUST_STATE.REPLAY_ATTACK) {
+        showTooltip(`Ce message est une copie d'un message envoyé par <b>${pseudo}</b> le ${new Date(timestamp).toLocaleDateString()} à ${new Date(timestamp).toLocaleTimeString()}`, elem.getBoundingClientRect().x, elem.getBoundingClientRect().y, "#ff0000");
+    }
+}
+
+function verifiedIconUnhoverHandler(elem) {
+    hideTooltips();
+}
+
+function parsePseudo(pseudo, status, isAdmin, verificationState, keyHash, timestamp) {
     let parsedPseudo;
     if (status !== "") {
-        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span><span class="author-status">${status}</span></span></span>`;
+        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" data-timestamp="${timestamp}" onclick="verifiedIconClickHandler(this)" onmouseenter="verifiedIconHoverHandler(this)" onmouseleave="verifiedIconUnhoverHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span><span class="author-status">${status}</span></span></span>`;
     }
     else {
-        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span></span></span>`;
+        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" data-timestamp="${timestamp}" onclick="verifiedIconClickHandler(this)" onmouseenter="verifiedIconHoverHandler(this)" onmouseleave="verifiedIconUnhoverHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span></span></span>`;
     }
     saveKnownUser(pseudo, status);
     for (let tag of TAGS) {
@@ -174,7 +216,7 @@ function parseSmallPseudo(text) {
 printMessage = async function(data) {
     const parsedMessage = await parseMessage(data.message, data.pseudo);
     data.message = formatter(parsedMessage.msg);
-    data.pseudo = parsePseudo(data.pseudo, parsedMessage.data?.userStatus || "", data.isAdmin, parsedMessage.verified, parsedMessage.key_hash);
+    data.pseudo = parsePseudo(data.pseudo, parsedMessage.data?.userStatus || "", data.isAdmin, parsedMessage.verified, parsedMessage.key_hash, parsedMessage.data?.timestamp || 0);
     if (data.pseudo === lastPseudo) {
         addToLastMessage(data.message);
     }
@@ -194,6 +236,7 @@ sendPseudo = function() {
 
 origSendMessage = sendMessage;
 sendMessage = async function() {
+    if (document.getElementById("textinput").value.length === 0) return;
     const s = CHAR_TABLE[0];
     const ts = new Date().getTime();
     document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideHex(ascii2hex(JSON.stringify({

@@ -23,3 +23,21 @@ async function showBooleanPopup(title, text) {
         });
     })
 }
+
+function showTooltip(html, x, y, textColor) {
+    const tooltip = document.createElement("div");
+    tooltip.classList.add("tooltip");
+    tooltip.innerHTML = html;
+    document.body.appendChild(tooltip);
+    const rect = tooltip.getBoundingClientRect();
+    tooltip.style.left = `${x + 7 - rect.width / 2}px`;
+    tooltip.style.bottom = `${window.innerHeight - y + 10}px`;
+    tooltip.style.color = textColor;
+}
+
+function hideTooltips() {
+    const tooltips = document.getElementsByClassName("tooltip");
+    for (let i = 0; i < tooltips.length; i++) {
+        document.body.removeChild(tooltips[i]);
+    }
+}
