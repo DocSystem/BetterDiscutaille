@@ -127,7 +127,7 @@ async function parseMessage(message, pseudo) {
         msg = `<span class="normal-message">${msg}</span>`;
     }
 
-    return {msg: msg, verified: verified, key_hash: key_hash};
+    return {msg: msg, verified: verified, key_hash: key_hash, data: data};
 }
 
 async function verifiedIconClickHandler(elem) {
@@ -150,17 +150,12 @@ async function verifiedIconClickHandler(elem) {
     }
 }
 
-function parsePseudo(text, isAdmin, verificationState, keyHash) {
-    let pseudo;
-    let status = "";
+function parsePseudo(pseudo, status, isAdmin, verificationState, keyHash) {
     let parsedPseudo;
-    if (text.includes(" | ")) {
-        pseudo = text.split(" | ")[0];
-        status = text.split(" | ")[1];
+    if (status !== "") {
         parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span><span class="author-status">${status}</span></span></span>`;
     }
     else {
-        pseudo = text;
         parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span></span></span>`;
     }
     saveKnownUser(pseudo, status);
@@ -192,7 +187,7 @@ function parseSmallPseudo(text) {
 printMessage = async function(data) {
     const parsedMessage = await parseMessage(data.message, data.pseudo);
     data.message = parsedMessage.msg;
-    data.pseudo = parsePseudo(data.pseudo, data.isAdmin, parsedMessage.verified, parsedMessage.key_hash);
+    data.pseudo = parsePseudo(data.pseudo, parsedMessage.data?.userStatus || "", data.isAdmin, parsedMessage.verified, parsedMessage.key_hash);
     if (data.pseudo === lastPseudo) {
         addToLastMessage(data.message);
     }
@@ -206,7 +201,7 @@ origSendPseudo = sendPseudo;
 sendPseudo = function() {
     config.pseudo = document.getElementById("pseudoInput").value;
     config.status = document.getElementById("statusInput").value;
-    document.getElementById("pseudo").value = document.getElementById("pseudoInput").value + (document.getElementById("statusInput").value !== "" ? " | " + document.getElementById("statusInput").value : "");
+    document.getElementById("pseudo").value = document.getElementById("pseudoInput").value;
     origSendPseudo();
 }
 
@@ -216,9 +211,10 @@ sendMessage = async function() {
     const ts = new Date().getTime();
     document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideHex(ascii2hex(JSON.stringify({
         dataType: "signedMessage",
-        signature: await getMessageSignature(`${document.getElementById("textinput").value}-${config.pseudo}-${ts}`),
+        signature: await getMessageSignature(`${document.getElementById("textinput").value}-${escapeHtml(config.pseudo)}-${ts}`),
         timestamp: ts,
-        publicKey: config.personal_key.publicKey
+        publicKey: config.personal_key.publicKey,
+        userStatus: config.status
     })));
     await origSendMessage();
 }
@@ -339,8 +335,10 @@ async function bdInit() {
     }
     sendPseudo();
     await printMessage({
-        pseudo: "Better Discutaille SYSTÈME | Made with love by DocSystem",
-        message: "Better Discutaille s'est chargé correctement !\nQue le chaos soit !",
+        pseudo: "Better Discutaille SYSTÈME",
+        message: CHAR_TABLE[0].repeat(3) + "Better Discutaille s'est chargé correctement !\nQue le chaos soit !" + hideHex(ascii2hex(JSON.stringify({
+            userStatus: "Made with love by DocSystem"
+        }))),
         isAdmin: true
     });
 }
