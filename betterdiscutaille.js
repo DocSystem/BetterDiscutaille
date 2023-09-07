@@ -62,7 +62,7 @@ async function verifyMessageSignature(msg, data, pseudo) {
     // verify that the signature is valid
     if (await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
         // verify that the message isn't too old
-        if (data.timestamp < new Date().getTime() - 1000 * 2) return TRUST_STATE.TIMEOUT;
+        if (data.timestamp < new Date().getTime() - 1000 * 10) return TRUST_STATE.TIMEOUT;
 
         // verify that the message wasn't already sent
         if (alreadySentSignatures.includes(data.signature)) {
@@ -72,7 +72,7 @@ async function verifyMessageSignature(msg, data, pseudo) {
             alreadySentSignatures.push(data.signature);
             setTimeout(() => {
                 alreadySentSignatures = alreadySentSignatures.filter(s => s !== data.signature);
-            }, 1000 * 2);
+            }, 1000 * 10);
         }
 
         // verify that the key is trusted and that the pseudo is correct
