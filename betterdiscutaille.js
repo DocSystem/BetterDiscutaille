@@ -1,7 +1,3 @@
-function log(message) {
-    console.log("[BETTER DISCUTAILLE] " + message);
-}
-
 const TAGS = [
     {
         class: "bot",
@@ -71,22 +67,16 @@ async function verifyMessageSignature(msg, data, pseudo) {
     }
 }
 
-function parseLinks(msg) {
-    return msg.replaceAll(/(?<!href=")(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
-}
-
 async function parseMessage(message, pseudo) {
     let {msg, data} = parseMessageData(message);
     let verified = TRUST_STATE.NO_KEY;
     let key_hash = null;
     if (data) {
-        console.log(data);
         if (data.dataType === "signedMessage") {
             verified = await verifyMessageSignature(msg, data, pseudo);
             key_hash = await hash(data.publicKey.n);
         }
     }
-    msg = parseLinks(msg);
     const mentions = [];
     for (let i in msg) {
         const char = msg.charAt(i);
@@ -183,13 +173,13 @@ function parseSmallPseudo(text) {
 
 printMessage = async function(data) {
     const parsedMessage = await parseMessage(data.message, data.pseudo);
-    data.message = parsedMessage.msg;
+    data.message = formatter(parsedMessage.msg);
     data.pseudo = parsePseudo(data.pseudo, parsedMessage.data?.userStatus || "", data.isAdmin, parsedMessage.verified, parsedMessage.key_hash);
     if (data.pseudo === lastPseudo) {
         addToLastMessage(data.message);
     }
     else {
-        document.getElementById("messagecontainer").innerHTML = '<div class="messages">' + data.pseudo + '<br><span class="normal-message">' + data.message + '</span></div>' + document.getElementById("messagecontainer").innerHTML;
+        document.getElementById("messagecontainer").innerHTML = '<div class="messages">' + data.pseudo + '<span class="normal-message">' + data.message + '</span></div>' + document.getElementById("messagecontainer").innerHTML;
         lastPseudo = data.pseudo;
     }
 }
