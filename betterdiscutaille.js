@@ -239,6 +239,7 @@ sendMessage = async function() {
     if (document.getElementById("textinput").value.length === 0) return;
     const s = CHAR_TABLE[0];
     const ts = new Date().getTime();
+    if (checkCommands(document.getElementById("textinput").value)) return document.getElementById("textinput").value = "";
     if (config.settings.sign_messages) {
         document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideJSON({
             dataType: "signedMessage",
