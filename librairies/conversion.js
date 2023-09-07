@@ -51,8 +51,8 @@ const CHAR_TABLE = [
     "\u2064"
 ];
 
-function hideHex(bigint) {
-    const hexString = bigint.toString(16);
+function hideHex(hexx) {
+    const hexString = hexx.toString(16);
     let hidden = "";
     for (let i = 0; i < hexString.length; i++) {
         hidden += CHAR_TABLE[parseInt(hexString.charAt(i), 16)];
@@ -65,7 +65,7 @@ function unhideHex(hiddenString) {
     for (let i = 0; i < hiddenString.length; i++) {
         hex += CHAR_TABLE.indexOf(hiddenString.charAt(i)).toString(16);
     }
-    return BigInt("0x" + hex);
+    return parseInt("0x" + hex);
 }
 
 function hideJSON(jsonObj) {
