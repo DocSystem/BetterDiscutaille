@@ -24,6 +24,8 @@ function importCSS(file) {
 
 window.onload = async function() {
     await importJS('librairies/config.js');
+    await importJS('librairies/gui.js');
+    await importJS('librairies/conversion.js');
     await importJS('librairies/crypto.js');
     await importJS('betterdiscutaille.js');
     importCSS('betterdiscutaille.css');

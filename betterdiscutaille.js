@@ -15,7 +15,21 @@ const TAGS = [
     }
 ]
 
-const VERIFIED_ICON = `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #3f7b5d"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></svg>`;
+const TRUST_STATE = {
+    TIMEOUT: 103,
+    KEY_INVALID: 102,
+    NO_KEY: 101,
+    KEY_UNTRUSTED: 100,
+    KEY_TRUSTED: 0
+}
+
+const VERIFIED_ICON = {
+    103: `<svg viewBox="0 0 384 512" style="width: 14px; height: 14px; fill: #cb500e"><path d="M32 0C14.3 0 0 14.3 0 32S14.3 64 32 64V75c0 42.4 16.9 83.1 46.9 113.1L146.7 256 78.9 323.9C48.9 353.9 32 394.6 32 437v11c-17.7 0-32 14.3-32 32s14.3 32 32 32H64 320h32c17.7 0 32-14.3 32-32s-14.3-32-32-32V437c0-42.4-16.9-83.1-46.9-113.1L237.3 256l67.9-67.9c30-30 46.9-70.7 46.9-113.1V64c17.7 0 32-14.3 32-32s-14.3-32-32-32H320 64 32zM96 75V64H288V75c0 25.5-10.1 49.9-28.1 67.9L192 210.7l-67.9-67.9C106.1 124.9 96 100.4 96 75z"/></svg>`,
+    102: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #ff0000"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"/></svg>`,
+    101: ``,
+    100: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #ffcc00"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24V264c0 13.3-10.7 24-24 24s-24-10.7-24-24V152c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg>`,
+    0: `<svg viewBox="0 0 512 512" style="width: 14px; height: 14px; fill: #3f7b5d"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></svg>`
+};
 
 function saveKnownUser(pseudo, status) {
     let user = config.known_users.find(u => u.pseudo === pseudo);
@@ -29,7 +43,6 @@ function saveKnownUser(pseudo, status) {
     if (!user.statuses.includes(status)) {
         user.statuses.push(status);
     }
-    saveConfig();
 }
 
 function parseMessageData(msg) {
@@ -44,21 +57,37 @@ function parseMessageData(msg) {
     }
 }
 
-async function verifyMessageSignature(message, pseudo) {
-    const {msg, data} = parseMessageData(message);
-    if (!data) return false;
-    console.log(data);
-    const signature = BigInt(data.signature);
-    if (data.timestamp < new Date().getTime() - 1000 * 2) return false;
-    return await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, signature, BigInt(data.public_key));
+async function verifyMessageSignature(msg, data, pseudo) {
+    if (data.timestamp < new Date().getTime() - 1000 * 2) return TRUST_STATE.TIMEOUT;
+    const key_hash = await hash(data.publicKey.n);
+    // verify that the signature is valid
+    if (await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
+        // verify that the key is trusted and that the pseudo is correct
+        const trusted_user = config.trusted_users.find(u => u.key_hash === key_hash && u.pseudo === pseudo);
+        return (trusted_user !== undefined) ? TRUST_STATE.KEY_TRUSTED : TRUST_STATE.KEY_UNTRUSTED;
+    }
+    else {
+        return TRUST_STATE.KEY_INVALID;
+    }
 }
 
 function parseLinks(msg) {
     return msg.replaceAll(/(?<!href=")(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
-async function parseMessage(msg, pseudo) {
-    const verified = await verifyMessageSignature(msg, pseudo);
+async function parseMessage(message, pseudo) {
+    let {msg, data} = parseMessageData(message);
+    let verified = TRUST_STATE.NO_KEY;
+    let key_hash = null;
+    if (data) {
+        console.log(data);
+        if (data.dataType === "signedMessage") {
+            verified = await verifyMessageSignature(msg, data, pseudo);
+            if (verified === TRUST_STATE.KEY_UNTRUSTED) {
+                key_hash = await hash(data.publicKey.n);
+            }
+        }
+    }
     msg = parseLinks(msg);
     const mentions = [];
     for (let i in msg) {
@@ -98,21 +127,41 @@ async function parseMessage(msg, pseudo) {
         msg = `<span class="normal-message">${msg}</span>`;
     }
 
-    return {msg: msg, verified: verified};
+    return {msg: msg, verified: verified, key_hash: key_hash};
 }
 
-function parsePseudo(text, isAdmin, isVerified) {
+async function verifiedIconClickHandler(elem) {
+    const keyHash = elem.getAttribute("data-key-hash");
+    const pseudo = elem.getAttribute("data-pseudo");
+    const verificationState = parseInt(elem.getAttribute("data-verification-state"));
+    if (verificationState === TRUST_STATE.KEY_UNTRUSTED) {
+        if (await showBooleanPopup("Confirmation", `Voulez-vous vraiment faire confiance à <b>${pseudo}</b> ?`)) {
+            if (config.trusted_users.find(u => u.key_hash === keyHash && u.pseudo === pseudo) !== undefined) return;
+            config.trusted_users.push({
+                key_hash: keyHash,
+                pseudo: pseudo
+            });
+            document.querySelectorAll(`.verified-icon[data-key-hash="${keyHash}"][data-pseudo="${pseudo}"]`).forEach(e => {
+                e.innerHTML = VERIFIED_ICON[TRUST_STATE.KEY_TRUSTED];
+                e.setAttribute("data-verification-state", TRUST_STATE.KEY_TRUSTED);
+                e.setAttribute("data-key-hash", "null");
+            });
+        }
+    }
+}
+
+function parsePseudo(text, isAdmin, verificationState, keyHash) {
     let pseudo;
     let status = "";
     let parsedPseudo;
     if (text.includes(" | ")) {
         pseudo = text.split(" | ")[0];
         status = text.split(" | ")[1];
-        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo}</span><span class="author-status">${status}</span></span></span>`;
+        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span><span class="author-status">${status}</span></span></span>`;
     }
     else {
         pseudo = text;
-        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${isVerified ? `<span class="verified">${VERIFIED_ICON}</span>` : ""}</span></span></span>`;
+        parsedPseudo = `<span class="author-container"><span class="author-data"><span class="author-pseudo">${pseudo} ${verificationState !== TRUST_STATE.NO_KEY ? `<span class="verified-icon" data-key-hash="${keyHash}" data-pseudo="${pseudo}" data-verification-state="${verificationState}" onclick="verifiedIconClickHandler(this)">${VERIFIED_ICON[verificationState]}</span>` : ""}</span></span></span>`;
     }
     saveKnownUser(pseudo, status);
     for (let tag of TAGS) {
@@ -143,7 +192,7 @@ function parseSmallPseudo(text) {
 printMessage = async function(data) {
     const parsedMessage = await parseMessage(data.message, data.pseudo);
     data.message = parsedMessage.msg;
-    data.pseudo = parsePseudo(data.pseudo, data.isAdmin, parsedMessage.verified);
+    data.pseudo = parsePseudo(data.pseudo, data.isAdmin, parsedMessage.verified, parsedMessage.key_hash);
     if (data.pseudo === lastPseudo) {
         addToLastMessage(data.message);
     }
@@ -157,7 +206,6 @@ origSendPseudo = sendPseudo;
 sendPseudo = function() {
     config.pseudo = document.getElementById("pseudoInput").value;
     config.status = document.getElementById("statusInput").value;
-    saveConfig();
     document.getElementById("pseudo").value = document.getElementById("pseudoInput").value + (document.getElementById("statusInput").value !== "" ? " | " + document.getElementById("statusInput").value : "");
     origSendPseudo();
 }
@@ -168,9 +216,9 @@ sendMessage = async function() {
     const ts = new Date().getTime();
     document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideHex(ascii2hex(JSON.stringify({
         dataType: "signedMessage",
-        signature: "0x" + (await getMessageSignature(`${document.getElementById("textinput").value}-${config.pseudo}-${ts}`)).toString(16),
+        signature: await getMessageSignature(`${document.getElementById("textinput").value}-${config.pseudo}-${ts}`),
         timestamp: ts,
-        public_key: config.personal_key.n
+        publicKey: config.personal_key.publicKey
     })));
     await origSendMessage();
 }
