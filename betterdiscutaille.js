@@ -46,11 +46,10 @@ function saveKnownUser(pseudo, status) {
 }
 
 function parseMessageData(msg) {
-    if (msg.length < 2) return {msg: msg, data: null};;
+    if (msg.length < 2) return {msg: msg, data: null};
     const isFromExtension = msg.charCodeAt(0) === CHAR_TABLE[0].charCodeAt(0) && msg.charCodeAt(1) === CHAR_TABLE[0].charCodeAt(0) && msg.charCodeAt(2) === CHAR_TABLE[0].charCodeAt(0);
     if (!isFromExtension) return {msg: msg, data: null};
-    const message_data_hex = unhideHex(msg.split("").filter(c => CHAR_TABLE.includes(c)).join("").slice(3));
-    const message_data = JSON.parse(hex2ascii(message_data_hex.toString(16), "hex"));
+    const message_data = unhideJSON(msg.split("").filter(c => CHAR_TABLE.includes(c)).join("").slice(3));
     return {
         msg: msg.split("").filter(c => !CHAR_TABLE.includes(c)).join(""),
         data: message_data
@@ -239,13 +238,21 @@ sendMessage = async function() {
     if (document.getElementById("textinput").value.length === 0) return;
     const s = CHAR_TABLE[0];
     const ts = new Date().getTime();
-    document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideHex(ascii2hex(JSON.stringify({
-        dataType: "signedMessage",
-        signature: await getMessageSignature(`${document.getElementById("textinput").value}-${escapeHtml(config.pseudo)}-${ts}`),
-        timestamp: ts,
-        publicKey: config.personal_key.publicKey,
-        userStatus: config.status
-    })));
+    if (config.settings.sign_messages) {
+        document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideJSON({
+            dataType: "signedMessage",
+            signature: await getMessageSignature(`${document.getElementById("textinput").value}-${escapeHtml(config.pseudo)}-${ts}`),
+            timestamp: ts,
+            publicKey: config.personal_key.publicKey,
+            userStatus: config.status
+        });
+    }
+    else {
+        document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideJSON({
+            dataType: "message",
+            userStatus: config.status
+        });
+    }
     await origSendMessage();
 }
 
