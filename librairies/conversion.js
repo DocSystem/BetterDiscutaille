@@ -65,7 +65,7 @@ function unhideHex(hiddenString) {
     for (let i = 0; i < hiddenString.length; i++) {
         hex += CHAR_TABLE.indexOf(hiddenString.charAt(i)).toString(16);
     }
-    return parseInt("0x" + hex);
+    return hex;
 }
 
 function hideJSON(jsonObj) {
@@ -73,5 +73,5 @@ function hideJSON(jsonObj) {
 }
 
 function unhideJSON(hidden) {
-
+    return JSON.parse(hex2ascii(unhideHex(hidden)));
 }

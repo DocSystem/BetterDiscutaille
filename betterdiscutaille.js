@@ -90,6 +90,7 @@ async function parseMessage(message, pseudo) {
     let verified = TRUST_STATE.NO_KEY;
     let key_hash = null;
     if (data) {
+        console.log(data);
         if (data.dataType === "signedMessage") {
             verified = await verifyMessageSignature(msg, data, pseudo);
             key_hash = await hash(data.publicKey.n);
