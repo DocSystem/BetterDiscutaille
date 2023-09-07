@@ -36,8 +36,7 @@ function showTooltip(html, x, y, textColor) {
 }
 
 function hideTooltips() {
-    const tooltips = document.getElementsByClassName("tooltip");
-    for (let i = 0; i < tooltips.length; i++) {
-        document.body.removeChild(tooltips[i]);
-    }
+    document.querySelectorAll(".tooltip").forEach((tooltip) => {
+        document.body.removeChild(tooltip);
+    });
 }
