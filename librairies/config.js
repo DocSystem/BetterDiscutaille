@@ -35,10 +35,3 @@ function loadConfig() {
     });
 }
 loadConfig();
-
-/*
-{
-    pseudo: string,
-    key_hash: hash
-}
- */
