@@ -26,6 +26,9 @@ function ascii2hex(str) {
 
 function b642bigint(b64) {
     b64 = b64.replace(/_/g, '/').replace(/-/g, '+');
+    if (b64.length % 4 > 0) {
+        b64 += '='.repeat(4 - b64.length % 4);
+    }
     return BigInt("0x" + atob(b64).split("").map(c => c.charCodeAt(0).toString(16)).join(""));
 }
 
@@ -85,10 +88,11 @@ async function checkValidSignature(msg, signature, key_n) {
 
 (async () => {
     if (config.personal_key) return;
+    console.log("[BETTER DISCUTAILLE] Generating RSA key...")
     let keyPair = await window.crypto.subtle.generateKey(
         {
             name: "RSA-OAEP",
-            modulusLength: 4096,
+            modulusLength: 1024,
             publicExponent: new Uint8Array([1, 0, 1]),
             hash: "SHA-256",
         },
