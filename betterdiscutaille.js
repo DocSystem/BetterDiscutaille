@@ -60,7 +60,7 @@ async function verifyMessageSignature(msg, data, pseudo) {
     const key_hash = await hash(data.publicKey.n);
 
     // verify that the signature is valid
-    if (await checkValidSignature(`${msg}-${pseudo}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
+    if (await checkValidSignature(`${btoa(msg)}-${btoa(pseudo)}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
         // verify that the message isn't too old
         if (data.timestamp < new Date().getTime() - 1000 * 10) return TRUST_STATE.TIMEOUT;
 
@@ -243,7 +243,7 @@ sendMessage = async function() {
     if (config.settings.sign_messages) {
         document.getElementById("textinput").value = s + s + s + document.getElementById("textinput").value + hideJSON({
             dataType: "signedMessage",
-            signature: await getMessageSignature(`${document.getElementById("textinput").value}-${escapeHtml(config.pseudo)}-${ts}`),
+            signature: await getMessageSignature(`${btoa(escapeHtml(document.getElementById("textinput").value))}-${btoa(escapeHtml(config.pseudo))}-${ts}`),
             timestamp: ts,
             publicKey: config.personal_key.publicKey,
             userStatus: config.status
