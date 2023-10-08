@@ -25,16 +25,9 @@ function loadConfig() {
     }
     let configObject = JSON.parse(window.localStorage.getItem("config"));
 
-    config = new Proxy(configObject, {
-        set: function (target, property, value) {
-            target[property] = value;
-            // console.log(`[BETTER DISCUTAILLE] Config updated: ${property} = ${value}`);
-            saveConfig();
-            return true;
-        },
-        get: function (target, property) {
-            return target[property];
-        }
+    config = ObservableSlim.create(configObject, true, function(changes) {
+        // console.log("[BETTER DISCUTAILLE] Config updated: " + JSON.stringify(changes));
+        saveConfig();
     });
 }
 loadConfig();
