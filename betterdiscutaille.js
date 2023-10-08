@@ -61,13 +61,14 @@ async function verifyMessageSignature(msg, data, pseudo) {
 
     // verify that the signature is valid
     if (await checkValidSignature(`${btoa(msg)}-${btoa(pseudo)}-${data.timestamp}`, data.signature, await getPublicKey(data.publicKey))) {
-        // verify that the message isn't too old
-        if (data.timestamp < new Date().getTime() - 1000 * 10) return TRUST_STATE.TIMEOUT;
-
         // verify that the message wasn't already sent
         if (alreadySentSignatures.includes(data.signature)) {
             return TRUST_STATE.REPLAY_ATTACK;
         }
+
+        // verify that the message isn't too old
+        if (data.timestamp < new Date().getTime() - 1000 * 10) return TRUST_STATE.TIMEOUT;
+
         else {
             alreadySentSignatures.push(data.signature);
             setTimeout(() => {
@@ -217,7 +218,7 @@ printMessage = async function(data) {
     const parsedMessage = await parseMessage(data.message, data.pseudo);
     data.message = formatter(parsedMessage.msg);
     data.pseudo = parsePseudo(data.pseudo, parsedMessage.data?.userStatus || "", data.isAdmin, parsedMessage.verified, parsedMessage.key_hash, parsedMessage.data?.timestamp || 0);
-    if (data.pseudo === lastPseudo) {
+    if (data.pseudo.replace(/data-timestamp="[0-9]+"/, "") === lastPseudo.replace(/data-timestamp="[0-9]+"/, "")) {
         addToLastMessage(data.message);
     }
     else {
